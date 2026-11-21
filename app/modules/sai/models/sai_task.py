@@ -30,7 +30,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.db import Base
 from app.modules.sai.enums import (
@@ -49,6 +49,7 @@ from app.modules.sai.models.base import (
     UUIDPrimaryKeyMixin,
     pg_enum,
 )
+from app.modules.sai.state_machine import assert_transition
 
 
 class SaiTask(UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, Base):
@@ -208,3 +209,17 @@ class SaiTask(UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, Base):
             f"SaiTask(id={self.id!r}, task_type={self.task_type!r}, "
             f"subject_id={self.subject_id!r}, status={self.status!r})"
         )
+
+    @validates("status")
+    def _guard_status_transition(self, key: str, value):
+        """Guard direct ORM assignment with the same edge table as ``transition``.
+
+        Creating a task with an initial status is allowed (``current`` is None);
+        every later change must be a predefined edge.  This keeps a service that
+        bypasses :func:`transition` from persisting an illegal status.
+        """
+
+        current = self.__dict__.get("status")
+        if current is not None:
+            assert_transition(current, value, task_id=self.__dict__.get("id"))
+        return value

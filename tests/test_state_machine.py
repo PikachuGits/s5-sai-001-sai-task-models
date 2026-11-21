@@ -123,6 +123,19 @@ def test_self_transition_is_illegal():
             transition(task, status)
 
 
+def test_direct_orm_assignment_is_guarded_by_the_same_edge_table():
+    """A service that bypasses ``transition`` still cannot persist an illegal edge."""
+
+    task = status_task("queued")
+
+    with pytest.raises(InvalidTransition):
+        task.status = "approved"
+    assert str(task.status) == "queued"
+
+    task.status = "running"
+    assert str(task.status) == "running"
+
+
 def test_unknown_status_is_rejected():
     with pytest.raises(InvalidTransition):
         allowed_next("archived")

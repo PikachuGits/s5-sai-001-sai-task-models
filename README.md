@@ -205,6 +205,9 @@ transition(task, "running")        # 合法，task.status 变为 running
 transition(task, "approved")       # 非法：抛 InvalidTransition，task 保持不变
 ```
 
+`SaiTask.status` 还挂了 ORM 层的 `@validates` 守卫：绕过 `transition()` 直接赋值同样走
+同一张边表并抛 `InvalidTransition`，只有新建任务时的初始状态可以自由设定。
+
 约束分工：数据库的 `sai_task_status` 枚举负责值域；流转矩阵由
 `app/modules/sai/state_machine.py` 的 `ALLOWED_TRANSITIONS` 统一维护。没有用触发器实现，
 原因是 `CHECK` 无法表达矩阵、触发器会把业务规则藏进迁移并对批量回放不友好；所有写状态
@@ -215,13 +218,13 @@ transition(task, "approved")       # 非法：抛 InvalidTransition，task 保�
 | 验收标准 | 实现 | 验证 |
 |---|---|---|
 | AC1：`alembic upgrade head` 与 `downgrade -1` 在 PG16 成功，`alembic check` 无漂移 | `migrations/versions/0001_sai_tables.py`（枚举类型先建后删、部分索引、复合 FK） | `tests/test_migration_roundtrip.py::test_upgrade_downgrade_one_upgrade_and_zero_drift`；`scripts/migration-check.sh`；`evidence/02-migration-check.txt` |
-| AC2：状态机测试覆盖全部合法边，至少 5 条非法流转抛 `InvalidTransition` | `app/modules/sai/state_machine.py`（12 条边的显式表 + 异常） | `tests/test_state_machine.py`：12 条合法边逐条参数化；69 条非法边全量断言；另含 9 条代表性非法边 |
+| AC2：状态机测试覆盖全部合法边，至少 5 条非法流转抛 `InvalidTransition` | `app/modules/sai/state_machine.py`（12 条边的显式表 + 异常）；`SaiTask.status` 的 ORM `@validates` 守卫 | `tests/test_state_machine.py`：12 条合法边逐条参数化；69 条非法边全量断言；9 条代表性非法边；另验证直接赋值同样被拒 |
 | AC3：同 `(org_id, task_type, subject_id, input_hash)` 的未删除记录重复插入被唯一索引拒绝 | `uq_sai_task_idempotency`（`WHERE deleted_at IS NULL`） | `tests/test_task_unique.py`：断言冲突约束名为该索引；软删后可重跑；跨 org/hash/subject/task_type 允许 |
 
 实测（PostgreSQL 16.16，Python 3.12.12）：
 
 ```text
-97 passed
+98 passed
 alembic check: No new upgrade operations detected.
 ```
 
