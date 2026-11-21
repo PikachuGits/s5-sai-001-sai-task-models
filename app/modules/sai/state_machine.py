@@ -5,7 +5,7 @@ changes ``SaiTask.status`` must go through :func:`transition` (or at least
 :func:`assert_transition`), so an illegal move fails fast with
 :class:`InvalidTransition` instead of silently persisting an inconsistent task.
 
-Legal edges (10)::
+Legal edges (12)::
 
     queued     -> running | cancelled
     running    -> succeeded | failed | cancelled

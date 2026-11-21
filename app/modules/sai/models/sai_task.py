@@ -31,6 +31,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, validates
+from sqlalchemy.orm.exc import DetachedInstanceError
 
 from app.db import Base
 from app.modules.sai.enums import (
@@ -49,7 +50,7 @@ from app.modules.sai.models.base import (
     UUIDPrimaryKeyMixin,
     pg_enum,
 )
-from app.modules.sai.state_machine import assert_transition
+from app.modules.sai.state_machine import InvalidTransition, assert_transition
 
 
 class SaiTask(UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, Base):
@@ -214,12 +215,22 @@ class SaiTask(UUIDPrimaryKeyMixin, TenantMixin, TimestampMixin, Base):
     def _guard_status_transition(self, key: str, value):
         """Guard direct ORM assignment with the same edge table as ``transition``.
 
-        Creating a task with an initial status is allowed (``current`` is None);
-        every later change must be a predefined edge.  This keeps a service that
-        bypasses :func:`transition` from persisting an illegal status.
+        Creating a task with an initial status is allowed; every later change
+        must be a predefined edge.  The current value is read through the
+        instrumented attribute, not ``self.__dict__``: after a commit with the
+        default ``expire_on_commit=True`` the value is expired and absent from
+        ``__dict__``, and reading it lazily restores the persisted status before
+        the guard runs.  A detached expired instance cannot be checked, so the
+        assignment is rejected rather than treated as an initial state.
         """
 
-        current = self.__dict__.get("status")
+        try:
+            current = self.status
+        except DetachedInstanceError as exc:
+            raise InvalidTransition(
+                "unknown", value, task_id=self.__dict__.get("id")
+            ) from exc
+
         if current is not None:
             assert_transition(current, value, task_id=self.__dict__.get("id"))
         return value

@@ -9,8 +9,11 @@ from __future__ import annotations
 from itertools import product
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import sessionmaker
 
 from app.modules.sai.enums import TASK_STATUSES, TaskStatus
+from app.modules.sai.models import SaiTask
 from app.modules.sai.state_machine import (
     ALLOWED_TRANSITIONS,
     LEGAL_EDGE_COUNT,
@@ -23,7 +26,7 @@ from app.modules.sai.state_machine import (
     reachable_statuses,
     transition,
 )
-from tests.factories import status_task
+from tests.factories import status_task, make_task
 
 EXPECTED_EDGES = {
     ("queued", "running"),
@@ -134,6 +137,49 @@ def test_direct_orm_assignment_is_guarded_by_the_same_edge_table():
 
     task.status = "running"
     assert str(task.status) == "running"
+
+
+def test_expired_status_after_commit_is_still_guarded(engine, session):
+    """``expire_on_commit=True`` must not turn an illegal change into an initial state."""
+
+    session_factory = sessionmaker(bind=engine, expire_on_commit=True)
+    with session_factory() as expiring:
+        task = make_task()
+        expiring.add(task)
+        expiring.flush()
+        task_uuid = task.id
+        expiring.commit()
+
+        # The default session expires the attribute after commit.
+        assert "status" not in task.__dict__
+
+        with pytest.raises(InvalidTransition) as excinfo:
+            task.status = "approved"
+
+        assert excinfo.value.from_status == "queued"
+        assert excinfo.value.to_status == "approved"
+        assert task.status == TaskStatus.QUEUED  # lazily restored persisted value
+
+    persisted = session.scalar(select(SaiTask.status).where(SaiTask.id == task_uuid))
+    assert persisted == TaskStatus.QUEUED
+
+
+def test_expired_status_after_commit_allows_a_legal_edge(engine, session):
+    session_factory = sessionmaker(bind=engine, expire_on_commit=True)
+    with session_factory() as expiring:
+        task = make_task()
+        expiring.add(task)
+        expiring.flush()
+        task_uuid = task.id
+        expiring.commit()
+
+        assert "status" not in task.__dict__
+        task.status = "running"
+        assert task.status == TaskStatus.RUNNING
+        expiring.commit()
+
+    persisted = session.scalar(select(SaiTask.status).where(SaiTask.id == task_uuid))
+    assert persisted == TaskStatus.RUNNING
 
 
 def test_unknown_status_is_rejected():
