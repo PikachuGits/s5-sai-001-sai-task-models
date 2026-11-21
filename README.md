@@ -215,6 +215,14 @@ ORM 属性读取旧状态，因此默认 `expire_on_commit=True` 导致属性过
 原因是 `CHECK` 无法表达矩阵、触发器会把业务规则藏进迁移并对批量回放不友好；所有写状态
 的服务（worker、审核、回写）共用这一个表，规则只需改一处。
 
+守卫边界（重要）：
+
+- `@validates` 只覆盖 ORM 属性赋值。SQLAlchemy Core `update()`、`session.execute()` 的
+  bulk update、以及原生 SQL **不经过**该守卫，这些路径不得直接写 `status`，必须统一调用
+  `transition()`；若后续需要在数据库层强制，可另立工单增加触发器，本单未启用。
+- 脱离 Session 且属性已过期的实例无法取回旧状态，守卫 fail-closed 拒绝赋值；调用方应
+  先重新加载实例（如 `session.refresh(task)` 或重新查询）再走状态机。
+
 ## 5. 验收映射
 
 | 验收标准 | 实现 | 验证 |
