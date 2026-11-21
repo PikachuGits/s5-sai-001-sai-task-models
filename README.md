@@ -220,7 +220,7 @@ ORM 属性读取旧状态，因此默认 `expire_on_commit=True` 导致属性过
 | 验收标准 | 实现 | 验证 |
 |---|---|---|
 | AC1：`alembic upgrade head` 与 `downgrade -1` 在 PG16 成功，`alembic check` 无漂移 | `migrations/versions/0001_sai_tables.py`（枚举类型先建后删、部分索引、复合 FK） | `tests/test_migration_roundtrip.py::test_upgrade_downgrade_one_upgrade_and_zero_drift`；`scripts/migration-check.sh`；`evidence/02-migration-check.txt` |
-| AC2：状态机测试覆盖全部合法边，至少 5 条非法流转抛 `InvalidTransition` | `app/modules/sai/state_machine.py`（12 条边的显式表 + 异常）；`SaiTask.status` 的 ORM `@validates` 守卫 | `tests/test_state_machine.py`：12 条合法边逐条参数化；69 条非法边全量断言；9 条代表性非法边；直接赋值拦截；`expire_on_commit=True` 过期后仍拦截 |
+| AC2：状态机测试覆盖全部合法边，至少 5 条非法流转抛 `InvalidTransition` | `app/modules/sai/state_machine.py`（12 条边的显式表 + 异常）；`SaiTask.status` 的 ORM `@validates` 守卫 | `tests/test_state_machine.py`：12 条合法边逐条参数化；69 条非法边全量断言；9 条代表性非法边；直接赋值拦截；`expire_on_commit=True` 过期后仍拦截；`evidence/05-expired-guard.txt` |
 | AC3：同 `(org_id, task_type, subject_id, input_hash)` 的未删除记录重复插入被唯一索引拒绝 | `uq_sai_task_idempotency`（`WHERE deleted_at IS NULL`） | `tests/test_task_unique.py`：断言冲突约束名为该索引；软删后可重跑；跨 org/hash/subject/task_type 允许 |
 
 实测（PostgreSQL 16.16，Python 3.12.12）：
@@ -230,7 +230,8 @@ ORM 属性读取旧状态，因此默认 `expire_on_commit=True` 导致属性过
 alembic check: No new upgrade operations detected.
 ```
 
-`evidence/03-pytest.log` 为提交前的真实输出。
+`evidence/03-pytest.log` 为提交前的真实输出，`evidence/05-expired-guard.txt` 为复审探针
+（`expire_on_commit=True` 后直接赋值 `approved`）的修复结果。
 
 ## 6. 对接点与未含范围
 

@@ -1,0 +1,6 @@
+# Regression probe for the review finding: expired status after commit.
+# Session(expire_on_commit=True); task.status is expired; direct assignment to "approved".
+# Expected: InvalidTransition and the persisted value stays queued.
+expired: True
+RESULT: blocked -> Illegal task status transition: 'queued' -> 'approved'
+persisted status: queued
