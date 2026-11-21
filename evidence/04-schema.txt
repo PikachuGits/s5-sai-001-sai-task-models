@@ -1,0 +1,69 @@
+                                   Table "public.sai_task"
+     Column     |           Type           | Collation | Nullable |          Default          
+----------------+--------------------------+-----------+----------+---------------------------
+ id             | uuid                     |           | not null | gen_random_uuid()
+ org_id         | uuid                     |           | not null | 
+ site_id        | uuid                     |           | not null | 
+ task_type      | sai_task_type            |           | not null | 
+ subject_type   | sai_subject_type         |           | not null | 
+ subject_id     | uuid                     |           | not null | 
+ status         | sai_task_status          |           | not null | 'queued'::sai_task_status
+ prompt_key     | character varying(128)   |           |          | 
+ prompt_version | character varying(64)    |           |          | 
+ model_name     | character varying(128)   |           |          | 
+ input_hash     | character varying(64)    |           | not null | 
+ review_level   | sai_review_level         |           | not null | 'L1'::sai_review_level
+ review_item_id | uuid                     |           |          | 
+ error_code     | character varying(64)    |           |          | 
+ tokens_in      | integer                  |           | not null | 0
+ tokens_out     | integer                  |           | not null | 0
+ latency_ms     | integer                  |           |          | 
+ attempts       | integer                  |           | not null | 0
+ created_at     | timestamp with time zone |           | not null | now()
+ created_by     | uuid                     |           |          | 
+ updated_at     | timestamp with time zone |           | not null | now()
+ deleted_at     | timestamp with time zone |           |          | 
+Indexes:
+    "sai_task_pkey" PRIMARY KEY, btree (id)
+    "ix_sai_task_review_item" btree (org_id, review_item_id) WHERE review_item_id IS NOT NULL
+    "ix_sai_task_subject" btree (subject_type, subject_id)
+    "ix_sai_task_tenant_status" btree (org_id, site_id, status)
+    "uq_sai_task_id_tenant" UNIQUE CONSTRAINT, btree (id, org_id, site_id)
+    "uq_sai_task_idempotency" UNIQUE, btree (org_id, task_type, subject_id, input_hash) WHERE deleted_at IS NULL
+Check constraints:
+    "ck_sai_task_attempts_non_negative" CHECK (attempts >= 0)
+    "ck_sai_task_input_hash_sha256" CHECK (input_hash::text ~ '^[0-9a-f]{64}$'::text)
+    "ck_sai_task_latency_non_negative" CHECK (latency_ms IS NULL OR latency_ms >= 0)
+    "ck_sai_task_prompt_pair" CHECK ((prompt_key IS NULL) = (prompt_version IS NULL))
+    "ck_sai_task_tokens_in_non_negative" CHECK (tokens_in >= 0)
+    "ck_sai_task_tokens_out_non_negative" CHECK (tokens_out >= 0)
+Referenced by:
+    TABLE "sai_output" CONSTRAINT "fk_sai_output_task_tenant" FOREIGN KEY (task_id, org_id, site_id) REFERENCES sai_task(id, org_id, site_id) ON DELETE CASCADE
+
+                              Table "public.sai_output"
+     Column     |           Type           | Collation | Nullable |      Default      
+----------------+--------------------------+-----------+----------+-------------------
+ id             | uuid                     |           | not null | gen_random_uuid()
+ org_id         | uuid                     |           | not null | 
+ site_id        | uuid                     |           | not null | 
+ task_id        | uuid                     |           | not null | 
+ version        | integer                  |           | not null | 
+ output_json    | jsonb                    |           | not null | 
+ schema_version | character varying(64)    |           | not null | 
+ source         | sai_output_source        |           | not null | 
+ edited_by      | uuid                     |           |          | 
+ created_at     | timestamp with time zone |           | not null | now()
+ created_by     | uuid                     |           |          | 
+ updated_at     | timestamp with time zone |           | not null | now()
+ deleted_at     | timestamp with time zone |           |          | 
+Indexes:
+    "sai_output_pkey" PRIMARY KEY, btree (id)
+    "ix_sai_output_tenant_task" btree (org_id, site_id, task_id)
+    "uq_sai_output_task_version" UNIQUE, btree (task_id, version) WHERE deleted_at IS NULL
+Check constraints:
+    "ck_sai_output_output_json_document" CHECK (jsonb_typeof(output_json) = ANY (ARRAY['object'::text, 'array'::text]))
+    "ck_sai_output_source_edited_by" CHECK (source = 'ai'::sai_output_source AND edited_by IS NULL OR source = 'human_edit'::sai_output_source AND edited_by IS NOT NULL)
+    "ck_sai_output_version_positive" CHECK (version >= 1)
+Foreign-key constraints:
+    "fk_sai_output_task_tenant" FOREIGN KEY (task_id, org_id, site_id) REFERENCES sai_task(id, org_id, site_id) ON DELETE CASCADE
+

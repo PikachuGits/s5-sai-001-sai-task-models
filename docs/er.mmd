@@ -1,0 +1,37 @@
+erDiagram
+    SAI_TASK ||--o{ SAI_OUTPUT : "task_id + org_id + site_id"
+
+    SAI_TASK {
+        uuid id PK
+        uuid org_id
+        uuid site_id
+        enum task_type
+        enum subject_type
+        uuid subject_id
+        enum status
+        varchar prompt_key
+        varchar prompt_version
+        varchar model_name
+        varchar input_hash
+        enum review_level
+        uuid review_item_id
+        varchar error_code
+        integer tokens_in
+        integer tokens_out
+        integer latency_ms
+        integer attempts
+        timestamptz deleted_at
+    }
+
+    SAI_OUTPUT {
+        uuid id PK
+        uuid org_id
+        uuid site_id
+        uuid task_id FK
+        integer version
+        jsonb output_json
+        varchar schema_version
+        enum source
+        uuid edited_by
+        timestamptz deleted_at
+    }

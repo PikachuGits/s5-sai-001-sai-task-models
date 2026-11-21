@@ -1,0 +1,3 @@
+# PostgreSQL version (local test cluster)
+# 2026-11-21 21:45:12 CST
+PostgreSQL 16.16 (Homebrew) on aarch64-apple-darwin27.2.0, compiled by Apple clang version 21.0.0 (clang-2100.4.1.1), 64-bit

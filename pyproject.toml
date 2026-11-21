@@ -1,0 +1,9 @@
+[project]
+name = "sai-persistence"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "sai_task / sai_output models, migration and state machine for the 招商 AI module"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
